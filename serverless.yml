@@ -1,0 +1,84 @@
+service: sls-nestjs
+
+plugins:
+  - serverless-dotenv-plugin
+  - serverless-offline
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  profile: 'sandx'
+  region: us-east-1
+  environment:
+    DATABASE_HOST: "${env:DB_HOST}"
+    DATABASE_PORT: "${env:DB_PORT}"
+    DATABASE_USERNAME: "${env:DB_USERNAME}"
+    DATABASE_PASSWORD: "${env:DB_PASSWORD}"
+    DATABASE_NAME: "${env:DB_NAME}"
+
+functions:
+  main:
+    handler: dist/main.handler
+    events:
+      - http:
+          method: GET
+          path: 'api/profile'
+          cors:
+            origin: "*"
+            methods:
+              - OPTIONS
+              - GET
+            headers:
+               - Authorization
+               - "Content-Type"
+            allowCredentials: true
+      - http:
+          method: GET
+          path: 'api/profile/cart'
+          cors:
+            origin: "*"
+            methods:
+              - OPTIONS
+              - GET
+            headers:
+              - Authorization
+              - "Content-Type"
+            allowCredentials: true
+      - http:
+          method: PUT
+          path: 'api/profile/cart'
+          cors:
+            origin: "*"
+            methods:
+               - OPTIONS
+               - PUT
+            headers:
+              - Authorization
+              - "Content-Type"
+            allowCredentials: true
+      - http:
+          method: DELETE
+          path: 'api/profile/cart'
+          cors:
+            origin: "*"
+            methods:
+              - OPTIONS
+              - DELETE
+            headers:
+              - Authorization
+              - "Content-Type"
+            allowCredentials: true
+      - http:
+          method: POST
+          path: 'api/profile/cart/checkout'
+          cors:
+            origin: "*"
+            methods:
+              - OPTIONS
+              - POST
+            headers:
+              - Authorization
+              - "Content-Type"
+            allowCredentials: true

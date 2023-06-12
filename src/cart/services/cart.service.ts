@@ -1,31 +1,61 @@
 import { Injectable } from '@nestjs/common';
 
-import { v4 } from 'uuid';
+import { Cart, DBCart, DBCartItem } from '../models';
+import { query } from '../../db';
 
-import { Cart } from '../models';
+export enum CartStatus {
+  OPEN = 'OPEN',
+  ORDERED = 'ORDERED',
+};
+
+const getFirstRow = (rows) => rows?.[0];
 
 @Injectable()
 export class CartService {
   private userCarts: Record<string, Cart> = {};
 
-  findByUserId(userId: string): Cart {
-    return this.userCarts[ userId ];
-  }
+  async findByUserId(userId: string): Promise<DBCart | undefined> {
+    const cartRows = await query<DBCart>(`select * from carts where user_id = '${ userId }'`);
 
-  createByUserId(userId: string) {
-    const id = v4(v4());
-    const userCart = {
-      id,
-      items: [],
+    console.log(cartRows);
+
+    const cart = getFirstRow(cartRows);
+
+    if (!cart) {
+      return;
+    }
+
+    const cartItemsRows = await query<DBCartItem>(`select * from cart_items where cart_id = '${ cart.id }'`);
+
+    return {
+      ...cart,
+      items: cartItemsRows.rows.map(item => ({
+        ...item,
+        product: {
+          id: item.product_id
+        }
+      }))
     };
+  };
 
-    this.userCarts[ userId ] = userCart;
+  async createByUserId(userId: string) {
+    const date = new Date().toJSON();
 
-    return userCart;
-  }
+    const columns = 'user_id, created_at, updated_at, status';
+    const values = `'${ userId }', '${ date }', '${ date }', '${ CartStatus.OPEN }'`;
 
-  findOrCreateByUserId(userId: string): Cart {
-    const userCart = this.findByUserId(userId);
+    try {
+      const addedRows = await query<Cart>(`INSERT INTO carts(${columns}) VALUES(${values}) RETURNING *`);
+
+      return getFirstRow(addedRows);
+    } catch (err) {
+      console.log(err);
+      return err;
+    }
+  };
+
+  async findOrCreateByUserId(userId: string): Promise<DBCart> {
+    const userCart = await this.findByUserId(userId);
 
     if (userCart) {
       return userCart;
@@ -34,22 +64,36 @@ export class CartService {
     return this.createByUserId(userId);
   }
 
-  updateByUserId(userId: string, { items }: Cart): Cart {
-    const { id, ...rest } = this.findOrCreateByUserId(userId);
+  async updateByUserId(userId: string, { items }: Cart) {
+    const cart = await this.findOrCreateByUserId(userId);
 
     const updatedCart = {
-      id,
-      ...rest,
-      items: [ ...items ],
+      ...cart,
+      items
     }
 
-    this.userCarts[ userId ] = { ...updatedCart };
+    try {
+      await Promise.all(
+          items.map(item => {
+            const values = `'${ cart.id }', '${ item.count }', '${ item.product.id }'`;
+            return query(`insert into cart_items (cart_id, count, product_id) values(${ values })`);
+          }),
+      );
 
-    return { ...updatedCart };
+      return { ...updatedCart };
+    } catch (err) {
+      console.log(err);
+      return err;
+    }
+  };
+
+  async removeByUserId(userId) {
+    try {
+      const { id } = await this.findOrCreateByUserId(userId);
+      await query(`DELETE FROM cart_items WHERE cart_id = '${ id }'`);
+    } catch (err) {
+      console.log(err);
+      return err;
+    }
   }
-
-  removeByUserId(userId): void {
-    this.userCarts[ userId ] = null;
-  }
-
 }
